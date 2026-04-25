@@ -789,7 +789,6 @@ function TransactionDetail({ txn, onClose }) {
 function BarChart({ data, height = 120, color = C.green, labelKey = "label", valueKey = "value", formatVal }) {
   const maxVal = Math.max(...data.map((d) => d[valueKey]), 1);
   const fmt = formatVal || ((v) => v);
-  const W = 100 / data.length;
 
   return (
     <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
