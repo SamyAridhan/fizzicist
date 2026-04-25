@@ -1328,15 +1328,6 @@ export default function App() {
 
   return (
     <div style={ss.app}>
-      {/* Safari fix: -webkit- keyframe prefix */}
-      <style>{`
-        @keyframes fzFadeUp { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
-        @-webkit-keyframes fzFadeUp { from { opacity:0; -webkit-transform:translateX(-50%) translateY(10px); } to { opacity:1; -webkit-transform:translateX(-50%) translateY(0); } }
-        input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.5; }
-        * { -webkit-font-smoothing: antialiased; }
-        button { -webkit-appearance: none; }
-      `}</style>
-
       {/* Header */}
       <div style={{
         background: C.green, color: C.white, padding: "13px 18px",
