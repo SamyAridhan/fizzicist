@@ -49,11 +49,12 @@ const db = {
     const { data, error } = await supabase
       .from("transactions").select("*").order("timestamp", { ascending: false });
     if (error) { console.error("getTransactions:", error); return []; }
-    return data.map((t) => ({ ...t, user: t.user_name, receipt: t.receipt_url || null }));
+    return data.map((t) => ({ ...t, user: t.user_name, receipt: t.receipt_url || null, discount: parseFloat(t.discount || 0) }));
   },
   async insertTransaction(txn) {
     const { error } = await supabase.from("transactions").insert({
       id: txn.id, items: txn.items, total: txn.total,
+      discount: parseFloat(txn.discount || 0),
       timestamp: txn.timestamp, user_name: txn.user, receipt_url: txn.receipt_url || null,
     });
     if (error) throw error;
