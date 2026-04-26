@@ -1155,18 +1155,48 @@ function Records({ transactions, products, showToast }) {
         })}
       </div>
 
-      <div style={{ marginBottom: 14, position: "relative" }}>
-        <input type="date" value={pickedDate} max={toDateInput(now)} onChange={handlePickDate}
-          style={{ ...ss.input, borderColor: pickedDate ? C.green : C.border, color: pickedDate ? C.text : C.hint, paddingRight: pickedDate ? 40 : 14 }} />
+      {/* Date picker — visible tap target on mobile, native picker underneath */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ position: "relative" }}>
+          {/* Visible styled button — always shows, tap opens native date picker */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 14px", borderRadius: 10,
+            border: `1.5px solid ${pickedDate ? C.green : C.border}`,
+            background: pickedDate ? C.greenLight : C.white,
+            cursor: "pointer", userSelect: "none",
+          }}>
+            <span style={{ fontSize: 14, color: pickedDate ? C.text : C.hint, fontWeight: pickedDate ? 600 : 400 }}>
+              {pickedDate
+                ? new Date(pickedDate + "T00:00:00").toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" })
+                : "📅  Pick a specific date"}
+            </span>
+            {pickedDate
+              ? <button onClick={() => { setPickedDate(""); setFilter("day"); }} style={{
+                  background: "none", border: "none", fontSize: 18, color: C.hint,
+                  cursor: "pointer", lineHeight: 1, padding: "0 2px",
+                  WebkitTapHighlightColor: "transparent",
+                }}>✕</button>
+              : <span style={{ fontSize: 16, color: C.hint }}>›</span>
+            }
+          </div>
+          {/* Invisible native date input sits on top — triggers the native picker */}
+          <input
+            type="date"
+            value={pickedDate}
+            max={toDateInput(now)}
+            onChange={handlePickDate}
+            style={{
+              position: "absolute", inset: 0, opacity: 0,
+              width: "100%", height: "100%",
+              cursor: "pointer", fontSize: 16,
+              // keep opacity 0 but let it receive taps
+              WebkitAppearance: "none",
+            }}
+          />
+        </div>
         {pickedDate && (
-          <button onClick={() => { setPickedDate(""); setFilter("day"); }} style={{
-            position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", fontSize: 18, color: C.hint, cursor: "pointer", lineHeight: 1,
-            WebkitTapHighlightColor: "transparent",
-          }}>✕</button>
-        )}
-        {pickedDate && (
-          <div style={{ fontSize: 11, color: C.green, marginTop: 5, fontWeight: 600 }}>
+          <div style={{ fontSize: 11, color: C.green, marginTop: 5, fontWeight: 600, paddingLeft: 2 }}>
             📅 {new Date(pickedDate + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
           </div>
         )}
