@@ -25,6 +25,12 @@ const DISCOUNTS = [
   { label: "RM 0.50", value: 0.50 },
   { label: "RM 1.00", value: 1.00 },
 ];
+const roundMoney = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+const parseMoneyInput = (value) => {
+  const n = parseFloat(String(value || "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? roundMoney(Math.max(0, n)) : 0;
+};
+const countProductItems = (items = []) => items.reduce((s, i) => s + i.count, 0);
 
 // ─────────────────────────────────────────────
 // Supabase DB helpers
@@ -49,12 +55,19 @@ const db = {
     const { data, error } = await supabase
       .from("transactions").select("*").order("timestamp", { ascending: false });
     if (error) { console.error("getTransactions:", error); return []; }
-    return data.map((t) => ({ ...t, user: t.user_name, receipt: t.receipt_url || null, discount: parseFloat(t.discount || 0) }));
+    return data.map((t) => ({
+      ...t,
+      user: t.user_name,
+      receipt: t.receipt_url || null,
+      discount: parseFloat(t.discount || 0),
+      tip: parseFloat(t.tip || 0),
+    }));
   },
   async insertTransaction(txn) {
     const { error } = await supabase.from("transactions").insert({
       id: txn.id, items: txn.items, total: txn.total,
       discount: parseFloat(txn.discount || 0),
+      tip: parseFloat(txn.tip || 0),
       timestamp: txn.timestamp, user_name: txn.user, receipt_url: txn.receipt_url || null,
     });
     if (error) throw error;
@@ -460,9 +473,11 @@ function ProductModal({ product, cartItem, onAdd, onClose }) {
 // ─────────────────────────────────────────────
 function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
   const [discountIdx, setDiscountIdx] = useState(0); // index into DISCOUNTS
+  const [tipText, setTipText] = useState("");
   const subtotal  = cart.reduce((s, i) => s + i.price * i.count, 0);
   const discount  = DISCOUNTS[discountIdx].value;
-  const total     = Math.max(0, subtotal - discount);
+  const tip       = parseMoneyInput(tipText);
+  const total     = roundMoney(Math.max(0, subtotal - discount) + tip);
 
   return (
     <div style={ss.overlay} onClick={onClose}>
@@ -525,9 +540,49 @@ function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
               </div>
             </div>
 
+            {/* Tip row */}
+            <div style={{
+              margin: "10px 0 0", padding: "10px 14px",
+              background: tip > 0 ? C.greenLight : "#F9FAFB",
+              borderRadius: 10,
+              border: `1.5px solid ${tip > 0 ? C.greenMid : C.border}`,
+              display: "flex", alignItems: "center", gap: 12,
+              transition: "background 0.2s, border-color 0.2s",
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: "0.05em" }}>
+                  TIP / KEEP CHANGE
+                </div>
+                <div style={{ fontSize: 12, color: tip > 0 ? C.green : C.hint, marginTop: 2 }}>
+                  Optional
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 13, color: C.muted, fontWeight: 700 }}>RM</span>
+                <input
+                  value={tipText}
+                  onChange={(e) => setTipText(e.target.value)}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  style={{
+                    width: 86, padding: "8px 10px", borderRadius: 8,
+                    border: `1.5px solid ${tip > 0 ? C.greenMid : C.border}`,
+                    background: tip > 0 ? C.white : "#F3F4F6",
+                    color: tip > 0 ? C.text : C.hint,
+                    fontSize: 16, fontWeight: 700, textAlign: "right",
+                    fontFamily: BASE_FONT, outline: "none",
+                    WebkitAppearance: "none", appearance: "none",
+                  }}
+                />
+              </div>
+            </div>
+
             {/* Totals */}
             <div style={{ marginTop: 12 }}>
-              {discount > 0 && (
+              {(discount > 0 || tip > 0) && (
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13, color: C.muted }}>
                   <span>Subtotal</span>
                   <span>{RM(subtotal)}</span>
@@ -539,16 +594,22 @@ function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
                   <span>− {RM(discount)}</span>
                 </div>
               )}
+              {tip > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13, color: C.green, fontWeight: 600 }}>
+                  <span>Tip</span>
+                  <span>+ {RM(tip)}</span>
+                </div>
+              )}
               <div style={{
                 display: "flex", justifyContent: "space-between", padding: "12px 0",
-                borderTop: `2px solid ${C.border}`, marginTop: discount > 0 ? 4 : 0,
+                borderTop: `2px solid ${C.border}`, marginTop: discount > 0 || tip > 0 ? 4 : 0,
               }}>
                 <span style={{ fontWeight: 700, fontSize: 16 }}>Total</span>
                 <span style={{ fontWeight: 800, fontSize: 20, color: C.green }}>{RM(total)}</span>
               </div>
             </div>
 
-            <button onClick={() => onConfirm({ total, discount })} style={ss.btnPrimary}>
+            <button onClick={() => onConfirm({ total, discount, tip })} style={ss.btnPrimary}>
               Confirm Order →
             </button>
           </>
@@ -561,7 +622,7 @@ function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
 // ─────────────────────────────────────────────
 // RECEIPT MODAL
 // ─────────────────────────────────────────────
-function ReceiptModal({ total, discount, itemCount, onConfirm, onClose }) {
+function ReceiptModal({ total, discount, tip, itemCount, onConfirm, onClose }) {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const handleComplete = async () => {
@@ -598,6 +659,7 @@ function ReceiptModal({ total, discount, itemCount, onConfirm, onClose }) {
           <div style={{ fontSize: 12, color: C.muted }}>ORDER TOTAL</div>
           <div style={{ fontWeight: 800, color: C.green, fontSize: 20 }}>{RM(total)}</div>
           {discount > 0 && <div style={{ fontSize: 11, color: "#F97316", marginTop: 2 }}>Discount applied: − {RM(discount)}</div>}
+          {tip > 0 && <div style={{ fontSize: 11, color: C.green, marginTop: 2 }}>Tip included: + {RM(tip)}</div>}
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 12, color: C.muted }}>ITEMS</div>
@@ -619,7 +681,7 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
   const [showAdd, setShowAdd] = useState(false);
   const [selProd, setSelProd] = useState(null);
   const [showCart, setShowCart] = useState(false);
-  // { total, discount } passed from CartSheet
+  // { total, discount, tip } passed from CartSheet
   const [orderInfo, setOrderInfo] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
 
@@ -646,7 +708,7 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
     let receipt_url = null;
     if (receiptDataUrl) receipt_url = await db.uploadImage("receipts", receiptDataUrl, `receipt_${id}.jpg`);
     const txn = {
-      id, items: [...cart], total: orderInfo.total, discount: orderInfo.discount,
+      id, items: [...cart], total: orderInfo.total, discount: orderInfo.discount, tip: orderInfo.tip,
       timestamp: new Date().toISOString(), user, receipt_url, receipt: receipt_url,
     };
     await onTransaction(txn);
@@ -722,7 +784,7 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
       )}
       {showReceipt && orderInfo && (
         <ReceiptModal
-          total={orderInfo.total} discount={orderInfo.discount}
+          total={orderInfo.total} discount={orderInfo.discount} tip={orderInfo.tip}
           itemCount={cartCount}
           onConfirm={handleConfirm}
           onClose={() => { setShowReceipt(false); setShowCart(true); }} />
@@ -736,6 +798,7 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
 // ─────────────────────────────────────────────
 function TransactionDetail({ txn, onClose }) {
   const discount = parseFloat(txn.discount || 0);
+  const tip = parseFloat(txn.tip || 0);
   return (
     <Modal title="Transaction Details" onClose={onClose}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
@@ -743,7 +806,7 @@ function TransactionDetail({ txn, onClose }) {
           ["DATE & TIME", fmtDate(txn.timestamp)],
           ["STAFF", txn.user || txn.user_name],
           ["TRANSACTION ID", `#${txn.id.slice(-6).toUpperCase()}`],
-          ["ITEMS COUNT", txn.items.reduce((s, i) => s + i.count, 0)],
+          ["ITEMS COUNT", countProductItems(txn.items)],
         ].map(([label, val]) => (
           <div key={label} style={{ background: "#F9FAFB", borderRadius: 10, padding: "10px 12px" }}>
             <div style={{ fontSize: 10, color: C.muted, marginBottom: 3, fontWeight: 700, letterSpacing: "0.04em" }}>{label}</div>
@@ -766,6 +829,11 @@ function TransactionDetail({ txn, onClose }) {
       {discount > 0 && (
         <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 13, color: "#F97316", fontWeight: 600 }}>
           <span>Discount applied</span><span>− {RM(discount)}</span>
+        </div>
+      )}
+      {tip > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 13, color: C.green, fontWeight: 600 }}>
+          <span>Tip / keep change</span><span>+ {RM(tip)}</span>
         </div>
       )}
       <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderTop: `2px solid ${C.border}`, marginBottom: 16 }}>
@@ -874,7 +942,8 @@ function Analytics({ transactions, products }) {
   const totalTxns     = filtered.length;
   const avgOrder      = totalTxns > 0 ? totalRevenue / totalTxns : 0;
   const totalDiscount = filtered.reduce((s, t) => s + parseFloat(t.discount || 0), 0);
-  const totalItems    = filtered.reduce((s, t) => s + t.items.reduce((a, i) => a + i.count, 0), 0);
+  const totalItems    = filtered.reduce((s, t) => s + countProductItems(t.items), 0);
+  const totalTips     = filtered.reduce((s, t) => s + parseFloat(t.tip || 0), 0);
 
   // Revenue by day (last N days)
   const dayCount = range === "week" ? 7 : range === "month" ? 30 : 14;
@@ -1039,6 +1108,13 @@ function Analytics({ transactions, products }) {
             </div>
           )}
 
+          {totalTips > 0 && (
+            <div style={{ background: C.greenLight, borderRadius: 10, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>Tips collected</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: C.green }}>+ {RM(totalTips)}</span>
+            </div>
+          )}
+
           {/* Revenue over time */}
           <div style={{ ...ss.card, marginBottom: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: C.text }}>📈 Revenue Over Time</div>
@@ -1111,7 +1187,8 @@ function Records({ transactions, products, showToast }) {
   });
 
   const totalRevenue = filtered.reduce((s, t) => s + parseFloat(t.total), 0);
-  const totalItems   = filtered.reduce((s, t) => s + t.items.reduce((a, i) => a + i.count, 0), 0);
+  const totalItems   = filtered.reduce((s, t) => s + countProductItems(t.items), 0);
+  const totalTips    = filtered.reduce((s, t) => s + parseFloat(t.tip || 0), 0);
 
   const handlePickDate = (e) => { setPickedDate(e.target.value); if (e.target.value) setFilter(""); };
   const handleQuickFilter = (k) => { setFilter(k); setPickedDate(""); };
@@ -1208,6 +1285,7 @@ function Records({ transactions, products, showToast }) {
         <div style={{ display: "flex", gap: 20, marginTop: 10, fontSize: 13, opacity: 0.8 }}>
           <span>📋 {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}</span>
           <span>🧃 {totalItems} items sold</span>
+          {totalTips > 0 && <span>Tips {RM(totalTips)}</span>}
         </div>
       </div>
 
@@ -1231,8 +1309,9 @@ function Records({ transactions, products, showToast }) {
                     </div>
                     <div style={{ fontSize: 12, color: C.muted }}>{fmtDate(txn.timestamp)}</div>
                     <div style={{ fontSize: 12, color: C.hint, marginTop: 1 }}>
-                      by {txn.user || txn.user_name} · {txn.items.reduce((s, i) => s + i.count, 0)} items
+                      by {txn.user || txn.user_name} · {countProductItems(txn.items)} items
                       {parseFloat(txn.discount || 0) > 0 && <span style={{ color: "#F97316" }}> · disc {RM(txn.discount)}</span>}
+                      {parseFloat(txn.tip || 0) > 0 && <span style={{ color: C.green }}> · tip {RM(txn.tip)}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
