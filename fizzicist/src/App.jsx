@@ -1246,6 +1246,7 @@ function Records({ transactions, products, showToast }) {
   const [pickedDate, setPickedDate] = useState("");
   const [selected, setSelected] = useState(null);
   const [syncing, setSyncing]   = useState(false);
+  const dateInputRef = useRef(null);
 
   const now = new Date();
   const filtered = transactions.filter((txn) => {
@@ -1263,6 +1264,16 @@ function Records({ transactions, products, showToast }) {
 
   const handlePickDate = (e) => { setPickedDate(e.target.value); if (e.target.value) setFilter(""); };
   const handleQuickFilter = (k) => { setFilter(k); setPickedDate(""); };
+  const openDatePicker = () => {
+    const input = dateInputRef.current;
+    if (!input) return;
+    input.focus();
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+    } else {
+      input.click();
+    }
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -1307,12 +1318,13 @@ function Records({ transactions, products, showToast }) {
       <div style={{ marginBottom: 14 }}>
         <div style={{ position: "relative" }}>
           {/* Visible styled button — always shows, tap opens native date picker */}
-          <div style={{
+          <button type="button" onClick={openDatePicker} style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "12px 14px", borderRadius: 10,
+            width: "100%", padding: "12px 14px", borderRadius: 10,
             border: `1.5px solid ${pickedDate ? C.green : C.border}`,
             background: pickedDate ? C.greenLight : C.white,
-            cursor: "pointer", userSelect: "none",
+            cursor: "pointer", userSelect: "none", fontFamily: BASE_FONT,
+            WebkitTapHighlightColor: "transparent",
           }}>
             <span style={{ fontSize: 14, color: pickedDate ? C.text : C.hint, fontWeight: pickedDate ? 600 : 400 }}>
               {pickedDate
@@ -1320,26 +1332,24 @@ function Records({ transactions, products, showToast }) {
                 : "📅  Pick a specific date"}
             </span>
             {pickedDate
-              ? <button onClick={() => { setPickedDate(""); setFilter("day"); }} style={{
+              ? <span onClick={(e) => { e.stopPropagation(); setPickedDate(""); setFilter("day"); }} style={{
                   background: "none", border: "none", fontSize: 18, color: C.hint,
                   cursor: "pointer", lineHeight: 1, padding: "0 2px",
                   WebkitTapHighlightColor: "transparent",
-                }}>✕</button>
+                }}>✕</span>
               : <span style={{ fontSize: 16, color: C.hint }}>›</span>
             }
-          </div>
+          </button>
           {/* Invisible native date input sits on top — triggers the native picker */}
           <input
+            ref={dateInputRef}
             type="date"
             value={pickedDate}
             max={toDateInput(now)}
             onChange={handlePickDate}
             style={{
-              position: "absolute", inset: 0, opacity: 0,
-              width: "100%", height: "100%",
-              cursor: "pointer", fontSize: 16,
-              // keep opacity 0 but let it receive taps
-              WebkitAppearance: "none",
+              position: "absolute", width: 1, height: 1, opacity: 0,
+              pointerEvents: "none", right: 0, bottom: 0,
             }}
           />
         </div>
