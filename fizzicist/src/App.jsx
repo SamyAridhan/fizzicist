@@ -61,6 +61,8 @@ const db = {
       receipt: t.receipt_url || null,
       discount: parseFloat(t.discount || 0),
       tip: parseFloat(t.tip || 0),
+      delivery_fee: parseFloat(t.delivery_fee || 0),
+      channel: t.channel || "walkin",
     }));
   },
   async insertTransaction(txn) {
@@ -68,6 +70,8 @@ const db = {
       id: txn.id, items: txn.items, total: txn.total,
       discount: parseFloat(txn.discount || 0),
       tip: parseFloat(txn.tip || 0),
+      delivery_fee: 0,
+      channel: "walkin",
       timestamp: txn.timestamp, user_name: txn.user, receipt_url: txn.receipt_url || null,
     });
     if (error) throw error;
@@ -1001,6 +1005,28 @@ function Analytics({ transactions, products }) {
       .sort((a, b) => b.rev - a.rev);
   }, [filtered]);
 
+  const deliveryStats = useMemo(() => {
+    const deliveryTxns = rangeFiltered.filter((t) => (t.channel || "walkin") === "delivery");
+    const walkinTxns = rangeFiltered.filter((t) => (t.channel || "walkin") === "walkin");
+    const deliveryCount = deliveryTxns.length;
+    const walkinCount = walkinTxns.length;
+    const totalDelivFees = deliveryTxns.reduce((s, t) => s + parseFloat(t.delivery_fee || 0), 0);
+    const freeDelivCount = deliveryTxns.filter((t) => parseFloat(t.delivery_fee || 0) === 0).length;
+    const delivRevenue = deliveryTxns.reduce((s, t) => s + parseFloat(t.total), 0);
+    const totalOrders = deliveryCount + walkinCount;
+    return {
+      deliveryCount,
+      walkinCount,
+      totalDelivFees,
+      freeDelivCount,
+      delivRevenue,
+      hasDelivery: deliveryCount > 0,
+      walkinPct: totalOrders > 0 ? (walkinCount / totalOrders) * 100 : 0,
+      deliveryPct: totalOrders > 0 ? (deliveryCount / totalOrders) * 100 : 0,
+      avgDelivFee: deliveryCount > 0 ? totalDelivFees / deliveryCount : 0,
+    };
+  }, [rangeFiltered]);
+
   // Peak hour
   const peakHour = useMemo(() => {
     const map = {};
@@ -1017,6 +1043,17 @@ function Analytics({ transactions, products }) {
 
   const maxProdRev = productRevenue[0]?.rev || 1;
   const maxStaffRev = staffRevenue[0]?.rev || 1;
+  const {
+    deliveryCount,
+    walkinCount,
+    totalDelivFees,
+    freeDelivCount,
+    delivRevenue,
+    hasDelivery,
+    walkinPct,
+    deliveryPct,
+    avgDelivFee,
+  } = deliveryStats;
 
   const kpiStyle = {
     background: C.white, borderRadius: 12, border: `1px solid ${C.border}`,
@@ -1067,7 +1104,7 @@ function Analytics({ transactions, products }) {
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && !hasDelivery ? (
         <div style={{ textAlign: "center", padding: "50px 20px", color: C.muted }}>
           <div style={{ fontSize: 44, marginBottom: 12 }}>📊</div>
           <div style={{ fontWeight: 600 }}>No data for this period</div>
@@ -1159,6 +1196,40 @@ function Analytics({ transactions, products }) {
                   color={C.chartColors[(i + 2) % C.chartColors.length]}
                   formatVal={(v) => RM(v)} rank={i + 1} />
               ))}
+            </div>
+          )}
+
+          {hasDelivery && (
+            <div style={{ ...ss.card, marginBottom: 14, background: "#F0F9FF", borderColor: "#BAE6FD" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: "#0284C7" }}>Delivery Breakdown</div>
+
+              <div style={{ marginBottom: 14 }}>
+                <div style={{
+                  height: 12, borderRadius: 999, overflow: "hidden", background: "#E0F2FE",
+                  display: "flex", marginBottom: 7,
+                }}>
+                  <div style={{ width: `${walkinPct}%`, background: C.green }} />
+                  <div style={{ width: `${deliveryPct}%`, background: "#0284C7" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.muted, fontWeight: 700 }}>
+                  <span>Walk-in {walkinPct.toFixed(0)}% ({walkinCount})</span>
+                  <span>Delivery {deliveryPct.toFixed(0)}% ({deliveryCount})</span>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                {[
+                  ["Delivery Revenue", RM(delivRevenue)],
+                  ["Delivery Fees", RM(totalDelivFees)],
+                  ["Free Deliveries", `${freeDelivCount} / ${deliveryCount}`],
+                  ["Avg Fee per Order", RM(avgDelivFee)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ background: C.white, border: "1px solid #BAE6FD", borderRadius: 10, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: "0.04em", marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: "#0284C7" }}>{value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </>
