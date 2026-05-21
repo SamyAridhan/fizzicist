@@ -509,10 +509,23 @@ function AddProductModal({ onAdd, onClose }) {
 function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
   const [discountIdx, setDiscountIdx] = useState(0); // index into DISCOUNTS
   const [tipText, setTipText] = useState("");
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState(null);
+  const [saving, setSaving] = useState(false);
   const subtotal  = cart.reduce((s, i) => s + i.price * i.count, 0);
   const discount  = DISCOUNTS[discountIdx].value;
   const tip       = parseMoneyInput(tipText);
   const total     = roundMoney(Math.max(0, subtotal - discount) + tip);
+
+  const handleConfirmOrder = async () => {
+    setSaving(true);
+    try {
+      await onConfirm({ total, discount, tip, receiptDataUrl: receiptPreview || null });
+    } catch {
+      alert("Error saving transaction. Please try again.");
+      setSaving(false);
+    }
+  };
 
   return (
     <div style={ss.overlay} onClick={onClose}>
@@ -615,6 +628,49 @@ function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
               </div>
             </div>
 
+            {/* Optional receipt */}
+            <div style={{
+              margin: "10px 0 0", padding: "10px 14px",
+              background: receiptPreview ? C.greenLight : "#F9FAFB",
+              borderRadius: 10,
+              border: `1.5px solid ${receiptPreview ? C.greenMid : C.border}`,
+            }}>
+              <button type="button" onClick={() => setReceiptOpen((v) => !v)} style={{
+                width: "100%", background: "transparent", border: "none", padding: 0,
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                cursor: "pointer", fontFamily: BASE_FONT, WebkitTapHighlightColor: "transparent",
+              }}>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: "0.05em" }}>
+                    RECEIPT
+                  </div>
+                  <div style={{ fontSize: 12, color: receiptPreview ? C.green : C.hint, marginTop: 2 }}>
+                    {receiptPreview ? "Attached" : "Optional"}
+                  </div>
+                </div>
+                <span style={{ fontSize: 18, color: C.hint }}>{receiptOpen ? "⌃" : "›"}</span>
+              </button>
+
+              {receiptOpen && (
+                <div style={{ marginTop: 12 }}>
+                  {receiptPreview ? (
+                    <div style={{ position: "relative" }}>
+                      <img src={receiptPreview} alt="receipt"
+                        style={{ width: "100%", borderRadius: 10, maxHeight: 180, objectFit: "contain", background: "#F9FAFB" }} />
+                      <button onClick={() => setReceiptPreview(null)} style={{
+                        position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)",
+                        color: C.white, border: "none", borderRadius: 20, padding: "4px 10px",
+                        cursor: "pointer", fontSize: 12, fontFamily: BASE_FONT,
+                        WebkitTapHighlightColor: "transparent",
+                      }}>Retake</button>
+                    </div>
+                  ) : (
+                    <ImagePicker id="cart-receipt" onPick={setReceiptPreview} maxDim={1400} />
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Totals */}
             <div style={{ marginTop: 12 }}>
               {(discount > 0 || tip > 0) && (
@@ -644,8 +700,8 @@ function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
               </div>
             </div>
 
-            <button onClick={() => onConfirm({ total, discount, tip })} style={ss.btnPrimary}>
-              Confirm Order →
+            <button onClick={handleConfirmOrder} disabled={saving} style={{ ...ss.btnPrimary, opacity: saving ? 0.7 : 1 }}>
+              {saving ? "Saving..." : "Confirm Order →"}
             </button>
           </>
         )}
@@ -655,69 +711,11 @@ function CartSheet({ cart, onUpdate, onClose, onConfirm }) {
 }
 
 // ─────────────────────────────────────────────
-// RECEIPT MODAL
-// ─────────────────────────────────────────────
-function ReceiptModal({ total, discount, tip, itemCount, onConfirm, onClose }) {
-  const [preview, setPreview] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const handleComplete = async () => {
-    setLoading(true);
-    try { await onConfirm(preview || null); }
-    catch { alert("Error saving transaction. Please try again."); }
-    finally { setLoading(false); }
-  };
-  return (
-    <Modal title="Upload Receipt" onClose={onClose}>
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 44, marginBottom: 8 }}>📸</div>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Proof of Payment</div>
-        <div style={{ fontSize: 13, color: C.muted }}>Capture or upload the transfer receipt</div>
-      </div>
-      {preview ? (
-        <div style={{ position: "relative", marginBottom: 14 }}>
-          <img src={preview} alt="receipt" style={{ width: "100%", borderRadius: 12, maxHeight: 240, objectFit: "contain", background: "#F9FAFB" }} />
-          <button onClick={() => setPreview(null)} style={{
-            position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)",
-            color: C.white, border: "none", borderRadius: 20, padding: "4px 10px",
-            cursor: "pointer", fontSize: 12, fontFamily: BASE_FONT,
-            WebkitTapHighlightColor: "transparent",
-          }}>Retake</button>
-        </div>
-      ) : (
-        <ImagePicker id="receipt" onPick={setPreview} maxDim={1400} />
-      )}
-      <div style={{
-        background: C.greenLight, borderRadius: 10, padding: "12px 14px", marginBottom: 16,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-      }}>
-        <div>
-          <div style={{ fontSize: 12, color: C.muted }}>ORDER TOTAL</div>
-          <div style={{ fontWeight: 800, color: C.green, fontSize: 20 }}>{RM(total)}</div>
-          {discount > 0 && <div style={{ fontSize: 11, color: "#F97316", marginTop: 2 }}>Discount applied: − {RM(discount)}</div>}
-          {tip > 0 && <div style={{ fontSize: 11, color: C.green, marginTop: 2 }}>Tip included: + {RM(tip)}</div>}
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 12, color: C.muted }}>ITEMS</div>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{itemCount}</div>
-        </div>
-      </div>
-      <button onClick={handleComplete} disabled={loading} style={{ ...ss.btnPrimary, opacity: loading ? 0.7 : 1 }}>
-        {loading ? "Saving..." : preview ? "✅ Complete Transaction" : "⚡ Skip & Complete"}
-      </button>
-      {!preview && <div style={{ fontSize: 12, color: C.hint, textAlign: "center", marginTop: 8 }}>Receipt is optional</div>}
-    </Modal>
-  );
-}
-
-// ─────────────────────────────────────────────
 // DASHBOARD
 // ─────────────────────────────────────────────
 function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, showToast }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showCart, setShowCart] = useState(false);
-  // { total, discount, tip } passed from CartSheet
-  const [orderInfo, setOrderInfo] = useState(null);
-  const [showReceipt, setShowReceipt] = useState(false);
 
   const cartSubtotal = cart.reduce((s, i) => s + i.price * i.count, 0);
   const cartCount    = cart.reduce((s, i) => s + i.count, 0);
@@ -735,21 +733,19 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
       prev.map((i) => i.productId === productId ? { ...i, count: i.count + delta } : i).filter((i) => i.count > 0)
     );
 
-  const handleConfirm = useCallback(async (receiptDataUrl) => {
+  const handleConfirm = useCallback(async (orderInfo) => {
     const id = String(Date.now());
     let receipt_url = null;
-    if (receiptDataUrl) receipt_url = await db.uploadImage("receipts", receiptDataUrl, `receipt_${id}.jpg`);
+    if (orderInfo.receiptDataUrl) receipt_url = await db.uploadImage("receipts", orderInfo.receiptDataUrl, `receipt_${id}.jpg`);
     const txn = {
       id, items: [...cart], total: orderInfo.total, discount: orderInfo.discount, tip: orderInfo.tip,
       timestamp: new Date().toISOString(), user, receipt_url, receipt: receipt_url,
     };
     await onTransaction(txn);
     setCart([]);
-    setOrderInfo(null);
-    setShowReceipt(false);
+    setShowCart(false);
     showToast("Transaction saved!");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, orderInfo, user, onTransaction, showToast]);
+  }, [cart, user, onTransaction, showToast, setCart]);
 
   const handleDeleteProduct = async (id) => {
     try {
@@ -809,14 +805,7 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
       {showCart && (
         <CartSheet cart={cart} onUpdate={updateCart}
           onClose={() => setShowCart(false)}
-          onConfirm={(info) => { setOrderInfo(info); setShowCart(false); setShowReceipt(true); }} />
-      )}
-      {showReceipt && orderInfo && (
-        <ReceiptModal
-          total={orderInfo.total} discount={orderInfo.discount} tip={orderInfo.tip}
-          itemCount={cartCount}
-          onConfirm={handleConfirm}
-          onClose={() => { setShowReceipt(false); setShowCart(true); }} />
+          onConfirm={handleConfirm} />
       )}
     </div>
   );
@@ -1576,3 +1565,4 @@ export default function App() {
     </div>
   );
 }
+
