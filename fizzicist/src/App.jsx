@@ -356,19 +356,36 @@ function LoginPage({ onLogin }) {
 // ─────────────────────────────────────────────
 // PRODUCT CARD
 // ─────────────────────────────────────────────
-function ProductCard({ product, onSelect, onDelete }) {
+function ProductCard({ product, cartQty, onIncrement, onDecrement, onDelete }) {
   const holdTimer = useRef(null);
   const [held, setHeld] = useState(false);
   const startHold = () => { holdTimer.current = setTimeout(() => setHeld(true), 600); };
   const endHold = () => clearTimeout(holdTimer.current);
   const cancel = (e) => { e.stopPropagation(); setHeld(false); };
+  const stopButtonHold = (e) => {
+    e.stopPropagation();
+    clearTimeout(holdTimer.current);
+  };
+  const increment = (e) => {
+    e.stopPropagation();
+    clearTimeout(holdTimer.current);
+    onIncrement();
+  };
+  const decrement = (e) => {
+    e.stopPropagation();
+    clearTimeout(holdTimer.current);
+    onDecrement();
+  };
+
   return (
     <div style={{ position: "relative" }}>
-      <div onClick={() => !held && onSelect()}
+      <div
         onTouchStart={startHold} onTouchEnd={endHold}
         onMouseDown={startHold} onMouseUp={endHold}
         style={{
-          background: C.white, borderRadius: 14, border: `1px solid ${C.border}`,
+          background: C.white, borderRadius: 14,
+          border: cartQty > 0 ? `2px solid ${C.green}` : `1px solid ${C.border}`,
+          boxSizing: "border-box",
           overflow: "hidden", cursor: "pointer", userSelect: "none",
           WebkitUserSelect: "none", WebkitTapHighlightColor: "transparent",
         }}>
@@ -377,11 +394,51 @@ function ProductCard({ product, onSelect, onDelete }) {
             ? <img src={product.image} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
             : <span style={{ fontSize: 40 }}>🥤</span>}
         </div>
-        <div style={{ padding: "10px 12px 12px" }}>
+        <div style={{ padding: "10px 12px 12px", minHeight: 104, boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
           <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 2 }}>
             {product.name}
           </div>
           <div style={{ color: C.green, fontWeight: 700, fontSize: 15 }}>{RM(product.price)}</div>
+          <div style={{ marginTop: "auto", paddingTop: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", minHeight: 40 }}>
+            {cartQty > 0 ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  onClick={decrement}
+                  onTouchStart={stopButtonHold}
+                  onMouseDown={stopButtonHold}
+                  style={ss.counterBtn(true)}
+                  aria-label={`Remove one ${product.name}`}
+                >
+                  −
+                </button>
+                <span style={{ fontWeight: 800, fontSize: 16, minWidth: 24, textAlign: "center" }}>{cartQty}</span>
+                <button
+                  onClick={increment}
+                  onTouchStart={stopButtonHold}
+                  onMouseDown={stopButtonHold}
+                  style={{ ...ss.counterBtn(true), width: 40, height: 40, borderRadius: 20, border: "none", background: C.green, color: C.white, fontSize: 22 }}
+                  aria-label={`Add one ${product.name}`}
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={increment}
+                onTouchStart={stopButtonHold}
+                onMouseDown={stopButtonHold}
+                style={{
+                  width: 40, height: 40, borderRadius: 20, border: "none",
+                  background: C.green, color: C.white, fontSize: 22, fontWeight: 800,
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  lineHeight: 1, WebkitTapHighlightColor: "transparent",
+                }}
+                aria-label={`Add ${product.name}`}
+              >
+                +
+              </button>
+            )}
+          </div>
         </div>
       </div>
       {held && (
@@ -442,32 +499,6 @@ function AddProductModal({ onAdd, onClose }) {
       <button onClick={submit} disabled={saving} style={{ ...ss.btnPrimary, opacity: saving ? 0.7 : 1 }}>
         {saving ? "Saving..." : "Add Product"}
       </button>
-    </Modal>
-  );
-}
-
-// ─────────────────────────────────────────────
-// PRODUCT DETAIL MODAL
-// ─────────────────────────────────────────────
-function ProductModal({ product, cartItem, onAdd, onClose }) {
-  const [count, setCount] = useState(1);
-  return (
-    <Modal title={product.name} onClose={onClose}>
-      {product.image && <img src={product.image} alt={product.name}
-        style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 12, marginBottom: 16 }} />}
-      <div style={{ textAlign: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 26, fontWeight: 800, color: C.green }}>{RM(product.price)}</div>
-        {cartItem && <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>In cart: <strong>{cartItem.count}</strong></div>}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 28, marginBottom: 18 }}>
-        <button onClick={() => setCount((c) => Math.max(1, c - 1))} style={ss.counterBtn(false)}>−</button>
-        <span style={{ fontSize: 32, fontWeight: 800, minWidth: 48, textAlign: "center" }}>{count}</span>
-        <button onClick={() => setCount((c) => c + 1)} style={ss.counterBtn(false)}>+</button>
-      </div>
-      <div style={{ textAlign: "center", color: C.green, fontWeight: 700, fontSize: 16, marginBottom: 18 }}>
-        Subtotal: {RM(product.price * count)}
-      </div>
-      <button onClick={() => onAdd(product, count)} style={ss.btnPrimary}>Add to Cart +</button>
     </Modal>
   );
 }
@@ -683,7 +714,6 @@ function ReceiptModal({ total, discount, tip, itemCount, onConfirm, onClose }) {
 // ─────────────────────────────────────────────
 function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, showToast }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [selProd, setSelProd] = useState(null);
   const [showCart, setShowCart] = useState(false);
   // { total, discount, tip } passed from CartSheet
   const [orderInfo, setOrderInfo] = useState(null);
@@ -698,8 +728,6 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
       if (ex) return prev.map((i) => i.productId === prod.id ? { ...i, count: i.count + count } : i);
       return [...prev, { productId: prod.id, name: prod.name, price: prod.price, count }];
     });
-    setSelProd(null);
-    showToast(`${prod.name} added`);
   };
 
   const updateCart = (productId, delta) =>
@@ -751,9 +779,11 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
           {products.map((p) => (
-            <ProductCard key={p.id} product={p}
-              onSelect={() => setSelProd(p)}
-              onDelete={() => handleDeleteProduct(p.id)} />
+              <ProductCard key={p.id} product={p}
+                cartQty={cart.find((i) => i.productId === p.id)?.count || 0}
+                onIncrement={() => addToCart(p, 1)}
+                onDecrement={() => updateCart(p.id, -1)}
+                onDelete={() => handleDeleteProduct(p.id)} />
           ))}
         </div>
       )}
@@ -775,11 +805,6 @@ function Dashboard({ products, setProducts, cart, setCart, user, onTransaction, 
         <AddProductModal
           onAdd={(p) => { setProducts((prev) => [...prev, p]); setShowAdd(false); showToast(`${p.name} added!`); }}
           onClose={() => setShowAdd(false)} />
-      )}
-      {selProd && (
-        <ProductModal product={selProd}
-          cartItem={cart.find((i) => i.productId === selProd.id)}
-          onAdd={addToCart} onClose={() => setSelProd(null)} />
       )}
       {showCart && (
         <CartSheet cart={cart} onUpdate={updateCart}
